@@ -1,0 +1,17 @@
+[Unit]
+Description=Kovanica testnet PoA dashboard
+After=network.target kovanica-seed1.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/kovanica-testnet/dashboard
+Environment=DASHBOARD_BIND=127.0.0.1
+Environment=DASHBOARD_PORT=3001
+ExecStart=/usr/bin/python3 /root/kovanica-testnet/dashboard/dashboard.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
