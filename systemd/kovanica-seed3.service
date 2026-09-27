@@ -1,5 +1,5 @@
 [Unit]
-Description=Kovanica PoA validator (seed2, authority-2)
+Description=Kovanica PoA validator (seed3, authority-3)
 After=network.target
 Wants=network.target
 
@@ -9,15 +9,15 @@ User=root
 WorkingDirectory=/root
 Environment=KOVANICA_CONSENSUS=poa
 EnvironmentFile=/root/kovanica-testnet/authority-keys/authorities.conf
-Environment=KOVANICA_PEERS=seed.kovanica.online:9000,seed3.kovanica.online:9000
+Environment=KOVANICA_PEERS=seed.kovanica.online:9000
 Environment=KOVANICA_LISTEN=0.0.0.0:9000
-Environment=KOVANICA_DATA=/var/lib/kovanica-seed2
+Environment=KOVANICA_DATA=/var/lib/kovanica-seed3
 Environment=KOVANICA_OPERATOR=0
 Environment=KOVANICA_FAUCET=0
 Environment=KOVANICA_ALLOW_RESET=0
 Environment=KOVANICA_PRODUCE=1
 Environment=KOVANICA_PRODUCE_SECS=3
-EnvironmentFile=/root/kovanica-testnet/authority-keys/authority-2.env
+EnvironmentFile=/root/kovanica-testnet/authority-keys/authority-3.env
 ExecStart=/usr/local/bin/kovanica-node explorer 127.0.0.1:8080
 Restart=always
 RestartSec=30

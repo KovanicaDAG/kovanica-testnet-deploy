@@ -6,20 +6,30 @@ usage() { grep '^#' "$0" | cut -c4-; exit 0; }
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SEED2_ENV="${SCRIPT_DIR}/../testnet/seeds/seed2/env.sh"
+SEED2_ENV="${SCRIPT_DIR}/seeds/seed2/env.sh"
 [[ -f "$SEED2_ENV" ]] && source "$SEED2_ENV"
+
+# Load the public authority set from the deployment repo. The operator's
+# signing key is supplied separately via KOVANICA_AUTHORITY_KEY in the
+# authority-N.env file and copied to the target in step 6.
+AUTH_CONF="${SCRIPT_DIR}/authority-keys/authorities.conf"
+[[ -f "$AUTH_CONF" ]] && source "$AUTH_CONF"
+: "${KOVANICA_AUTHORITIES:?authority-keys/authorities.conf is required}"
+: "${KOVANICA_AUTHORITY_THRESHOLD:=2}"
+: "${KOVANICA_SLOT_DURATION:=3000}"
 
 TARGET="${TARGET:-${SEED2_SSH_USER}@${SEED2_SSH_HOST}}"
 NAME="seed2"
-PEERS="seed.kovanica.online:9000"
+PEERS="seed.kovanica.online:9000,seed3.kovanica.online:9000"
 EXPLORER_PORT=8080
 P2P_PORT=9000
 KEEP_BUILD=0
 METRICS_PORT=9090
 
-AUTHORITIES="4a4172c14e6073998caf9ad256974cd2908a67b7751fdbc2f031c24736b8e8ec,8ebc8a73235b631845d32ed4ea2d1dc563acfa1215b18428b17364c6e1563cf3,d6903aa7a17abfe681988f1b49a8adcec0d475c5e24ab955c1349a1c463bedae"
-THRESHOLD=2
-SLOT_DURATION=3000
+AUTHORITIES="$KOVANICA_AUTHORITIES"
+THRESHOLD="$KOVANICA_AUTHORITY_THRESHOLD"
+SLOT_DURATION="$KOVANICA_SLOT_DURATION"
+AUTHORITY_ENV="${SCRIPT_DIR}/authority-keys/authority-2.env"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -49,7 +59,7 @@ for key in "${AUTH_ARRAY[@]}"; do
     fi
 done
 
-REPO_ROOT="/root/kovanica/protocol"
+REPO_ROOT="/root/kovanica"
 REMOTE_SRC="/opt/kovanica-src"
 REMOTE_DATA="/var/lib/kovanica-$NAME"
 HOSTNAME="seed2.kovanica.online"
@@ -89,11 +99,18 @@ fi;
 source "$HOME/.cargo/env"'
 
 echo "[5/8] Building release binary..."
-ssh -i "$SEED2_SSH_KEY" "$TARGET" "source \$HOME/.cargo/env && cd '$REMOTE_SRC' && cargo build --release --locked -p kovanica-node"
+ssh -i "$SEED2_SSH_KEY" "$TARGET" "source \$HOME/.cargo/env && cd '$REMOTE_SRC/protocol' && cargo build --release --locked -p kovanica-node"
 
-echo "[6/8] Installing systemd service (PoA config)..."
+echo "[6/9] Copying authority configuration..."
+AUTHORITY_REMOTE_DIR="/root/kovanica-testnet/authority-keys"
+ssh -i "$SEED2_SSH_KEY" "$TARGET" "sudo mkdir -p '$AUTHORITY_REMOTE_DIR' && sudo chmod 700 '$AUTHORITY_REMOTE_DIR'"
+scp -q -i "$SEED2_SSH_KEY" "$AUTH_CONF" "$TARGET:$AUTHORITY_REMOTE_DIR/authorities.conf"
+scp -q -i "$SEED2_SSH_KEY" "$AUTHORITY_ENV" "$TARGET:$AUTHORITY_REMOTE_DIR/authority-2.env"
+ssh -i "$SEED2_SSH_KEY" "$TARGET" "sudo chmod 600 '$AUTHORITY_REMOTE_DIR'/authority-2.env"
+
+echo "[7/9] Installing systemd service (PoA config)..."
 ssh -i "$SEED2_SSH_KEY" "$TARGET" "sudo mkdir -p '$REMOTE_DATA' && \
-sudo cp '$REMOTE_SRC/target/release/kovanica-node' /usr/local/bin/kovanica-node && \
+sudo cp '$REMOTE_SRC/protocol/target/release/kovanica-node' /usr/local/bin/kovanica-node && \
 sudo tee /etc/systemd/system/kovanica-$NAME.service >/dev/null <<EOF
 [Unit]
 Description=Kovanica PoA validator (seed2, authority-2)
@@ -105,9 +122,6 @@ Type=simple
 WorkingDirectory=$REMOTE_DATA
 Environment=KOVANICA_LISTEN=0.0.0.0:$P2P_PORT
 Environment=KOVANICA_CONSENSUS=poa
-Environment=KOVANICA_AUTHORITIES=$AUTHORITIES
-Environment=KOVANICA_AUTHORITY_THRESHOLD=$THRESHOLD
-Environment=KOVANICA_SLOT_DURATION=$SLOT_DURATION
 Environment=KOVANICA_PEERS=$PEERS
 Environment=KOVANICA_OPERATOR=0
 Environment=KOVANICA_FAUCET=0
@@ -116,7 +130,8 @@ Environment=KOVANICA_DATA=$REMOTE_DATA
 Environment=KOVANICA_METRICS=0.0.0.0:$METRICS_PORT
 Environment=KOVANICA_PRODUCE=1
 Environment=KOVANICA_PRODUCE_SECS=3
-EnvironmentFile=/root/kovanica/deploy/testnet/authority-keys/authority-2.env
+EnvironmentFile=$AUTHORITY_REMOTE_DIR/authorities.conf
+EnvironmentFile=$AUTHORITY_REMOTE_DIR/authority-2.env
 ExecStart=/usr/local/bin/kovanica-node explorer 127.0.0.1:$EXPLORER_PORT
 Restart=always
 RestartSec=5
@@ -127,7 +142,7 @@ WantedBy=multi-user.target
 EOF
 sudo systemctl daemon-reload && sudo systemctl enable --now kovanica-$NAME"
 
-echo "[7/8] Firewall + fail2ban..."
+echo "[8/9] Firewall + fail2ban..."
 ssh -i "$SEED2_SSH_KEY" "$TARGET" "
 command -v ufw >/dev/null && sudo ufw allow ${P2P_PORT}/tcp comment 'Kovanica P2P' >/dev/null || true
 command -v ufw >/dev/null && sudo ufw allow from 127.0.0.1 to any port ${EXPLORER_PORT} comment 'Explorer loopback' >/dev/null || true
@@ -152,7 +167,7 @@ F2B
 sudo systemctl enable --now fail2ban || true
 " || true
 
-echo "[8/8] Prometheus node-exporter..."
+echo "[9/9] Prometheus node-exporter..."
 ssh -i "$SEED2_SSH_KEY" "$TARGET" "
 command -v apt-get >/dev/null && sudo apt-get install -y -qq prometheus-node-exporter >/dev/null 2>&1 || true
 sudo systemctl enable --now prometheus-node-exporter || true
