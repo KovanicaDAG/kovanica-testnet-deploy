@@ -180,6 +180,13 @@ HTML = """<!doctype html>
       box-shadow: 0 0 20px var(--accent-glow);
     }
 
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
     .brand h1 {
       margin: 0;
       font-family: var(--font-display);
@@ -188,10 +195,52 @@ HTML = """<!doctype html>
       letter-spacing: -0.02em;
     }
 
+    /* DEV / testnet marker — this surface is never mainnet. */
+    .env-badge {
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.1875rem 0.5rem;
+      border-radius: 0.375rem;
+      color: var(--warning);
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      white-space: nowrap;
+    }
+
     .brand p {
       margin: 0.125rem 0 0;
       font-size: 0.8125rem;
       color: var(--text-muted);
+    }
+
+    .dev-footer {
+      margin-top: 1.5rem;
+      padding: 0.875rem 1rem;
+      border-radius: 0.875rem;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .dev-footer strong {
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--warning);
+      margin-right: 0.375rem;
+    }
+
+    .dev-footer code {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text);
     }
 
     .controls {
@@ -478,8 +527,11 @@ HTML = """<!doctype html>
       <div class="brand">
         <div class="logo">K</div>
         <div>
-          <h1>Kovanica Testnet</h1>
-          <p>PoA Network Dashboard · <span id="started">—</span></p>
+          <div class="brand-title">
+            <h1>Kovanica</h1>
+            <span class="env-badge" title="Non-production network. Not mainnet. No real value.">DEV</span>
+          </div>
+          <p>kovanica-testnet · PoA Dashboard · <span id="started">—</span></p>
         </div>
       </div>
       <div class="controls">
@@ -523,6 +575,10 @@ HTML = """<!doctype html>
         </table>
       </div>
     </section>
+
+    <footer class="dev-footer">
+      <strong>DEV</strong> — non-production <code>kovanica-testnet</code>. No real value, no mainnet funds. Loopback-only; access via SSH tunnel.
+    </footer>
   </div>
 
   <script>
