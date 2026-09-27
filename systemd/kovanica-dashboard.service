@@ -1,5 +1,5 @@
 [Unit]
-Description=Kovanica testnet PoA dashboard
+Description=Kovanica testnet PoA dashboard (DEV, loopback only)
 After=network.target kovanica-seed1.service
 Wants=network.target
 
@@ -9,9 +9,24 @@ User=root
 WorkingDirectory=/root/kovanica-testnet/dashboard
 Environment=DASHBOARD_BIND=127.0.0.1
 Environment=DASHBOARD_PORT=3001
+Environment=DASHBOARD_INTERVAL=5
+# Ops panel is DISABLED by default. To enable it, generate a token and
+# uncomment the line below (never commit the token):
+#   install -m 600 /dev/null /root/kovanica-testnet/dashboard/ops-token
+#   openssl rand -hex 32 > /root/kovanica-testnet/dashboard/ops-token
+#   printf 'DASHBOARD_OPS_TOKEN=%s\n' "$(cat /root/kovanica-testnet/dashboard/ops-token)" \
+#     >> /etc/kovanica-dashboard.ops.conf
+#   sed -i 's|^EnvironmentFile=-/etc/kovanica-dashboard.ops.conf|#&|' /etc/systemd/system/kovanica-dashboard.service
+#   systemctl daemon-reload && systemctl restart kovanica-dashboard
+#EnvironmentFile=-/etc/kovanica-dashboard.ops.conf
 ExecStart=/usr/bin/python3 /root/kovanica-testnet/dashboard/dashboard.py
 Restart=always
 RestartSec=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/root/kovanica-testnet/dashboard
 
 [Install]
 WantedBy=multi-user.target
