@@ -1,0 +1,29 @@
+# kovanica-testnet — never commit operator secrets or runtime state.
+#
+# 1. PoA authority SIGNING keys. `authority-keys/authorities.conf` is PUBLIC
+#    (64-hex pubkeys + threshold) and IS tracked — every node must agree on the
+#    set. The `authority-N.env` files next to it are the operator's 32-byte
+#    Ed25519 seed (secret, mode 0600) and are referenced by the systemd units as
+#    `EnvironmentFile=`. They were tracked until 2026-09-30 and are now untracked;
+#    they stay on disk because systemd needs them.
+authority-keys/*.env
+
+# 2. Per-seed operator runtime state (snapshots, ledger logs, peer ban state).
+seeds/*/data/
+seeds/*/keys/
+seeds/*/logs/
+*.log
+
+# 3. Anything that looks like a local env/secret, repo-wide. `*.env.example`
+#    stays trackable.
+.env
+.env.*
+!.env.example
+
+# 4. Backups / editor / OS noise.
+*.backup
+*.bak
+*.swp
+.DS_Store
+__pycache__/
+*.pyc
