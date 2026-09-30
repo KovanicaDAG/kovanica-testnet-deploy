@@ -565,6 +565,27 @@ def build_alerts(latest, health, consensus):
     return alerts
 
 
+def _progress(history_row):
+    """Per-seed chain progress for one history row.
+
+    History rows are deliberately compact, so the per-seed metrics live under
+    short keys rather than their long names: ``b`` is the DAG block count and
+    ``bl`` is the blue score. Prefer the blue score because in GHOSTDAG the
+    total block count also includes red set-inclusion losers, which move for
+    reasons that have nothing to do with the owner making progress in its own
+    slot. Fall back to the block count when a node does not report one.
+    """
+    out = {}
+    for name in SEED_NAMES:
+        cell = history_row.get(name) or {}
+        value = cell.get("bl")
+        if value is None:
+            value = cell.get("b")
+        if isinstance(value, (int, float)):
+            out[name] = value
+    return out
+
+
 def build_owner_matrix(history, consensus, latest):
     """For each scheduled authority, did its own seed advance when it owned a slot?
 
@@ -576,7 +597,7 @@ def build_owner_matrix(history, consensus, latest):
         return {}
     matrix = {}
     for s in SEEDS:
-        matrix[s["name"]] = {"pk": s["authority_pk"], "owned": 0, "produced": 0, "missed": 0, "pending": 0}
+        matrix[s["name"]] = {"pk": s["authority_pk"], "owned": 0, "produced": 0, "behind": 0, "pending": 0}
     for i in range(1, len(history)):
         prev, cur = history[i - 1], history[i]
         if not prev.get("slot_owner") or prev.get("slot_owner") == cur.get("slot_owner"):
@@ -586,12 +607,24 @@ def build_owner_matrix(history, consensus, latest):
         if row is None:
             continue
         row["owned"] += 1
-        p, c = prev.get("blocks") or {}, cur.get("blocks") or {}
+        p, c = _progress(prev), _progress(cur)
         if owner in p and owner in c:
             if c[owner] > p[owner]:
                 row["produced"] += 1
             else:
-                row["missed"] += 1
+                # A slot this authority did not produce is not directly
+                # observable at this poll rate: with a 2-of-3 threshold the
+                # other two still produce, so the chain advances and this
+                # node's blue score moves too. The genuinely interesting case
+                # is this node's own view *not* moving while the rest of the
+                # network does, which means it is behind rather than that it
+                # skipped a slot. A network-wide pause is not attributed to
+                # any single authority here; blue.stalled / tip.frozen cover it.
+                others = [n for n in SEED_NAMES if n != owner and n in p and n in c]
+                if any(c[n] > p[n] for n in others):
+                    row["behind"] += 1
+                else:
+                    row["pending"] += 1
         else:
             row["pending"] += 1
     return matrix
@@ -1049,10 +1082,17 @@ HTML = r"""<!doctype html>
     <h2 style="margin-top:1.5rem">Authority production matrix <span class="hint">did the scheduled owner actually advance?</span></h2>
     <div class="table-wrap">
       <table id="ownerTable">
-        <thead><tr><th>Authority</th><th>Node</th><th>Slots observed</th><th>Produced</th><th>Missed</th><th>Unobserved</th><th>Success rate</th></tr></thead>
+        <thead><tr><th>Authority</th><th>Node</th><th>Slots observed</th><th>Produced</th><th>Behind</th><th>Unobserved</th><th>Success rate</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
+    <p class="hint">
+      Sampled from poll history, not from per-block authorship: a slot counts as
+      <strong>Produced</strong> when the scheduled owner's own blue score advanced across it.
+      With a 2-of-3 threshold the other two authorities still produce when one skips a slot,
+      so a skipped slot is not directly observable here. <strong>Behind</strong> means this
+      node's own view did not move while the rest of the network did.
+    </p>
   </section>
 
   <section class="panel">
@@ -1271,14 +1311,14 @@ function renderHealth() {
   const matrix = snap.owner_matrix || {};
   const orows = SEED_NAMES.map(name => {
     const m = matrix[name] || {};
-    const observed = (m.produced || 0) + (m.missed || 0);
+    const observed = (m.produced || 0) + (m.behind || 0);
     const rate = observed ? Math.round((m.produced / observed) * 100) : null;
     return `<tr>
       <td><code>${trunc(m.pk)}</code></td>
       <td><strong style="color:${color(name)}">${SEED_META[name].label}</strong></td>
       <td>${fmt(m.owned)}</td>
       <td class="${m.produced ? "ok-yes" : "ok-na"}">${fmt(m.produced)}</td>
-      <td class="${m.missed ? "ok-no" : "ok-na"}">${fmt(m.missed)}</td>
+      <td class="${m.behind ? "ok-no" : "ok-na"}">${fmt(m.behind)}</td>
       <td>${fmt(m.pending)}</td>
       <td>${rate == null ? "—" : `<span class="${rate === 100 ? "ok-yes" : "ok-no"}">${rate}%</span>`}</td>
     </tr>`;
